@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Genderize CSV Batch Processor</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background-color: #f6f8fa;
+      color: #24292f;
+      margin: 0;
+      padding: 40px 20px;
+    }
+    .container {
+      max-width: 640px;
+      margin: 0 auto;
+      background: #ffffff;
+      border: 1px solid #d0d7de;
+      border-radius: 8px;
+      padding: 32px;
+      box-shadow: 0 3px 6px rgba(140,149,159,0.15);
+    }
+    h1 { font-size: 24px; margin-top: 0; margin-bottom: 8px; }
+    p { color: #57606a; font-size: 14px; margin-bottom: 24px; }
+    label { font-weight: 600; display: block; margin-top: 16px; margin-bottom: 6px; font-size: 14px; }
+    input[type="text"], input[type="file"] {
+      width: 100%;
+      padding: 10px 12px;
+      border: 1px solid #d0d7de;
+      border-radius: 6px;
+      font-size: 14px;
+    }
+    input[type="text"]:focus { border-color: #0969da; outline: none; }
+    button {
+      width: 100%;
+      padding: 12px;
+      background-color: #2da44e;
+      color: #ffffff;
+      border: none;
+      border-radius: 6px;
+      font-size: 15px;
+      font-weight: 600;
+      margin-top: 24px;
+      cursor: pointer;
+    }
+    button:hover { background-color: #2c974b; }
+    button:disabled { background-color: #94d3a2; cursor: not-allowed; }
+    #status {
+      margin-top: 20px;
+      font-size: 14px;
+      font-weight: 600;
+      text-align: center;
+      min-height: 20px;
+    }
+    .note { font-size: 12px; color: #57606a; margin-top: 4px; }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>Genderize Batch Processor</h1>
+    <p>Upload a CSV dataset to process first names using the Genderize.io API.</p>
+
+    <label for="apiKeys">API Keys (comma-separated for key rotation):</label>
+    <input type="text" id="apiKeys" placeholder="e.g., key1, key2, key3" />
+    <div class="note">Automatically rotates to the next key if a rate limit (HTTP 429) occurs.</div>
+
+    <label for="csvFile">Select CSV File:</label>
+    <input type="file" id="csvFile" accept=".csv" />
+
+    <button id="processBtn" onclick="startBatchProcessing()">Process & Download CSV</button>
+
+    <div id="status"></div>
+  </div>
+
+  <script>
+    async function startBatchProcessing() {
+      const keysInput = document.getElementById("apiKeys").value.trim();
+      const fileInput = document.getElementById("csvFile");
+      const statusDiv = document.getElementById("status");
+      const btn = document.getElementById("processBtn");
+
+      if (!fileInput.files.length) {
+        alert("Please select a CSV file first.");
+        return;
+      }
+
+      const apiKeys = keysInput
+        ? keysInput.split(",").map(k => k.trim()).filter(k => k.length > 0)
+        : [];
+
+      const file = fileInput.files[0];
+      const text = await file.text();
+
+      const lines = text.split("\n").map(line => line.trim()).filter(line => line.length > 0);
+      if (lines.length <= 1) {
+        alert("The selected CSV file contains no data.");
+        return;
+      }
+
+      btn.disabled = true;
+      statusDiv.style.color = "#0969da";
+      statusDiv.innerText = "Parsing CSV records...";
+
+      let rawData = [];
+      lines.forEach((line, index) => {
+        const cols = line.match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g) || line.split(",");
+        if (cols.length >= 2) {
+          const phone = cols[0].replace(/"/g, '').trim();
+          const name = cols[1].replace(/"/g, '').trim();
+          const age = cols[2] ? cols[2].replace(/"/g, '').trim() : '';
+
+          if (index === 0 && (phone.toLowerCase().includes("phone") || phone.toLowerCase().includes("num") || name.toLowerCase().includes("name"))) {
+            return;
+          }
+          rawData.push({ phone, name, age });
+        }
+      });
+
+      const total = rawData.length;
+      const chunkSize = 10;
+      let results = [];
+      let activeKeyIndex = 0;
+
+      for (let i = 0; i < total; i += chunkSize) {
+        const chunk = rawData.slice(i, i + chunkSize);
+        let success = false;
+
+        while (!success) {
+          const queryParams = chunk
+            .map(item => `name[]=${encodeURIComponent(item.name.trim().split(' ')[0])}`)
+            .join('&');
+
+          let url = `https://api.genderize.io?${queryParams}`;
+          if (apiKeys.length > 0 && apiKeys[activeKeyIndex]) {
+            url += `&apikey=${apiKeys[activeKeyIndex]}`;
+          }
+
+          try {
+            const res = await fetch(url);
+            if (res.status === 429) {
+              if (activeKeyIndex < apiKeys.length - 1) {
+                activeKeyIndex++;
+                statusDiv.innerText = `Key limit reached. Rotating to API Key #${activeKeyIndex + 1}...`;
+                await new Promise(r => setTimeout(r, 1000));
+                continue;
+              } else {
+                statusDiv.style.color = "#cf222e";
+                statusDiv.innerText = "Error: Daily limit reached across all provided API Keys.";
+                btn.disabled = false;
+                return;
+              }
+            }
+
+            if (res.ok) {
+              const data = await res.json();
+              const items = Array.isArray(data) ? data : [data];
+
+              items.forEach((item, idx) => {
+                const orig = chunk[idx];
+                const gender = item.gender || 'unknown';
+                const accuracy = item.probability ? (item.probability * 100).toFixed(0) + '%' : '0%';
+
+                results.push({
+                  phone: orig.phone,
+                  name: orig.name,
+                  age: orig.age,
+                  gender: gender,
+                  accuracy: accuracy
+                });
+              });
+              success = true;
+            } else {
+              throw new Error(`HTTP ${res.status}`);
+            }
+          } catch (err) {
+            console.error("Batch processing error:", err);
+            statusDiv.style.color = "#cf222e";
+            statusDiv.innerText = `Network or API error at row ${i + 1}. Retrying...`;
+            await new Promise(r => setTimeout(r, 2000));
+          }
+        }
+
+        statusDiv.style.color = "#0969da";
+        statusDiv.innerText = `Processed ${Math.min(i + chunkSize, total)} of ${total} records...`;
+        await new Promise(r => setTimeout(r, 200));
+      }
+
+      // Generate dynamic output filename: <original>_Processed.csv
+      const lastDot = file.name.lastIndexOf('.');
+      const fileNameWithoutExt = lastDot !== -1 ? file.name.substring(0, lastDot) : file.name;
+      const fileExt = lastDot !== -1 ? file.name.substring(lastDot) : '.csv';
+      const outputFileName = `${fileNameWithoutExt}_Processed${fileExt}`;
+
+      let csv = "\uFEFFPhone Number,Full Name,Age,Gender,Accuracy\n";
+      results.forEach(r => {
+        csv += `"${r.phone}","${r.name}","${r.age}","${r.gender}","${r.accuracy}"\n`;
+      });
+
+      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+      const link = document.createElement("a");
+      link.href = URL.createObjectURL(blob);
+      link.download = outputFileName;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      statusDiv.style.color = "#1a7f37";
+      statusDiv.innerText = `Complete! File saved as "${outputFileName}".`;
+      btn.disabled = false;
+    }
+  </script>
+</body>
+</html>
