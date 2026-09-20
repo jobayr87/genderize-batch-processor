@@ -3,7 +3,19 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Genderize CSV Batch Processor</title>
+  <title>Gender & Duplicate Number Checker</title>
+  <!-- Password Protection Check -->
+  <script>
+    (function checkPassword() {
+      const pass = prompt("Enter Password to Access:");
+      if (pass !== "2026") {
+        alert("Incorrect Password!");
+        window.location.reload();
+      }
+    })();
+  </script>
+  <!-- Excel (.xlsx) Parsing Library -->
+  <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
   <style>
     * { box-sizing: border-box; }
     body {
@@ -11,240 +23,531 @@
       background-color: #f6f8fa;
       color: #24292f;
       margin: 0;
-      padding: 40px 20px;
+      padding: 30px 15px;
     }
     .container {
-      max-width: 640px;
+      max-width: 900px;
       margin: 0 auto;
       background: #ffffff;
       border: 1px solid #d0d7de;
-      border-radius: 8px;
+      border-radius: 12px;
       padding: 32px;
-      box-shadow: 0 3px 6px rgba(140,149,159,0.15);
+      box-shadow: 0 4px 12px rgba(140,149,159,0.12);
     }
-    h1 { font-size: 24px; margin-top: 0; margin-bottom: 8px; }
-    p { color: #57606a; font-size: 14px; margin-bottom: 24px; }
-    label { font-weight: 600; display: block; margin-top: 16px; margin-bottom: 6px; font-size: 14px; }
-    input[type="text"], input[type="file"] {
-      width: 100%;
-      padding: 10px 12px;
-      border: 1px solid #d0d7de;
-      border-radius: 6px;
-      font-size: 14px;
+    .text-center { text-align: center; }
+    .icon-badge {
+      width: 48px;
+      height: 48px;
+      background: #2563eb;
+      color: white;
+      border-radius: 50%;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 24px;
+      margin-bottom: 12px;
     }
-    input[type="text"]:focus { border-color: #0969da; outline: none; }
-    button {
-      width: 100%;
-      padding: 12px;
-      background-color: #2da44e;
-      color: #ffffff;
-      border: none;
+    h1 { font-size: 24px; margin: 0 0 8px 0; color: #1e293b; }
+    p.subtitle { color: #64748b; font-size: 14px; margin-top: 0; margin-bottom: 20px; }
+    
+    /* Config Panel */
+    .config-box {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      padding: 12px 16px;
+      margin-bottom: 20px;
+    }
+    .header-group {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 8px;
+    }
+    label { font-weight: 600; font-size: 13px; color: #334155; }
+    .get-api-link { font-size: 13px; color: #2563eb; text-decoration: none; font-weight: 600; }
+    .key-input-group { display: flex; gap: 8px; margin-bottom: 6px; }
+    .key-input-group input { flex: 1; padding: 8px 10px; border: 1px solid #cbd5e1; border-radius: 6px; font-size: 13px; font-family: monospace; }
+    .btn-sm { padding: 6px 12px; border: 1px solid #cbd5e1; border-radius: 6px; background: white; cursor: pointer; font-size: 12px; font-weight: 600; }
+    .btn-remove { color: #dc2626; }
+    .btn-add { background: #eff6ff; color: #2563eb; border-color: #bfdbfe; width: 100%; margin-top: 4px; }
+
+    /* File Upload Box */
+    .file-upload-box {
+      border: 2px dashed #cbd5e1;
+      border-radius: 8px;
+      padding: 16px;
+      background: #fafbfc;
+      text-align: center;
+      margin-bottom: 16px;
+    }
+    .file-upload-box input[type="file"] { display: none; }
+    .file-label-btn {
+      display: inline-block;
+      padding: 8px 16px;
+      background: #f1f5f9;
+      border: 1px solid #cbd5e1;
       border-radius: 6px;
-      font-size: 15px;
+      font-size: 13px;
       font-weight: 600;
-      margin-top: 24px;
+      color: #334155;
       cursor: pointer;
     }
-    button:hover { background-color: #2c974b; }
-    button:disabled { background-color: #94d3a2; cursor: not-allowed; }
-    #status {
-      margin-top: 20px;
-      font-size: 14px;
+    .file-label-btn:hover { background: #e2e8f0; }
+    .file-name-info {
+      font-size: 12px;
+      color: #2563eb;
       font-weight: 600;
-      text-align: center;
-      min-height: 20px;
+      margin-top: 6px;
     }
-    .note { font-size: 12px; color: #57606a; margin-top: 4px; }
+
+    /* Input & Action Buttons */
+    textarea {
+      width: 100%;
+      height: 150px;
+      padding: 12px;
+      border: 1px solid #cbd5e1;
+      border-radius: 8px;
+      font-family: monospace;
+      font-size: 13px;
+      resize: vertical;
+      outline: none;
+    }
+    textarea:focus { border-color: #2563eb; box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1); }
+    
+    .action-btns {
+      display: flex;
+      gap: 12px;
+      margin-top: 16px;
+      margin-bottom: 24px;
+    }
+    .btn-main {
+      flex: 3;
+      padding: 12px;
+      background-color: #2563eb;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .btn-main:hover { background-color: #1d4ed8; }
+    .btn-main:disabled { background-color: #93c5fd; cursor: not-allowed; }
+    .btn-clear {
+      flex: 1;
+      padding: 12px;
+      background-color: #64748b;
+      color: white;
+      border: none;
+      border-radius: 8px;
+      font-size: 15px;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .btn-clear:hover { background-color: #475569; }
+
+    /* Stats Grid */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 12px;
+      margin-bottom: 20px;
+    }
+    .stat-card {
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      padding: 12px;
+      border-radius: 8px;
+      text-align: center;
+      font-weight: 600;
+      font-size: 14px;
+    }
+    .stat-card.total { color: #0f172a; }
+    .stat-card.male { color: #2563eb; }
+    .stat-card.female { color: #db2777; }
+    .stat-card.dup { color: #dc2626; }
+
+    /* Download Section */
+    .download-section {
+      background: #f1f5f9;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      padding: 12px 16px;
+      margin-bottom: 20px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .download-btns { display: flex; gap: 8px; }
+    .btn-dl {
+      padding: 8px 14px;
+      border-radius: 6px;
+      font-size: 13px;
+      font-weight: 600;
+      cursor: pointer;
+      border: none;
+      color: white;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .btn-dl-all { background-color: #0f172a; }
+    .btn-dl-all:hover { background-color: #1e293b; }
+    .btn-dl-male { background-color: #2563eb; }
+    .btn-dl-male:hover { background-color: #1d4ed8; }
+    .btn-dl-female { background-color: #db2777; }
+    .btn-dl-female:hover { background-color: #be185d; }
+    .btn-dl:disabled { background-color: #cbd5e1; cursor: not-allowed; }
+
+    /* Results Table */
+    .table-container {
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      max-height: 400px;
+      overflow-y: auto;
+    }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; text-align: left; }
+    th { background: #f1f5f9; position: sticky; top: 0; padding: 10px 12px; border-bottom: 1px solid #e2e8f0; color: #475569; }
+    td { padding: 10px 12px; border-bottom: 1px solid #f1f5f9; color: #334155; }
+    
+    .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; }
+    .badge-male { background: #eff6ff; color: #2563eb; }
+    .badge-female { background: #fce7f3; color: #db2777; }
+    .badge-unknown { background: #f1f5f9; color: #64748b; }
+    .badge-unique { background: #dcfce7; color: #166534; }
+    .badge-duplicate { background: #fee2e2; color: #991b1b; }
+
+    #statusText { font-size: 13px; color: #64748b; margin-bottom: 8px; }
   </style>
 </head>
 <body>
+
   <div class="container">
-    <h1>Genderize Batch Processor</h1>
-    <p>Upload a CSV dataset to process full names using the Genderize.io API.</p>
+    <div class="text-center">
+      <div class="icon-badge">✓</div>
+      <h1>Gender & Duplicate Number Checker</h1>
+      <p class="subtitle">Paste text entries or Upload CSV/XLSX file — get results instantly.</p>
+    </div>
 
-    <label for="apiKeys">API Keys (comma-separated for key rotation):</label>
-    <input type="text" id="apiKeys" placeholder="e.g., key1, key2, key3" />
-    <div class="note">Automatically rotates to the next key if a rate limit (HTTP 429) occurs.</div>
+    <!-- API Key Settings -->
+    <div class="config-box">
+      <div class="header-group">
+        <label>API Keys Configuration:</label>
+        <a href="https://genderize.io/register" target="_blank" rel="noopener noreferrer" class="get-api-link">🔑 Get API Key</a>
+      </div>
+      <div id="apiKeysContainer"></div>
+      <button type="button" class="btn-sm btn-add" onclick="addKeyBox()">+ Add Another API Key</button>
+    </div>
 
-    <label for="csvFile">Select CSV File:</label>
-    <input type="file" id="csvFile" accept=".csv" />
+    <!-- File Upload Option -->
+    <div class="file-upload-box">
+      <label class="file-label-btn" for="fileInput">📁 Upload CSV or Excel (.xlsx)</label>
+      <input type="file" id="fileInput" accept=".csv, .xlsx, .xls" onchange="handleFileUpload(event)" />
+      <div class="file-name-info" id="fileNameDisplay"></div>
+    </div>
 
-    <button id="processBtn" onclick="startBatchProcessing()">Process & Download CSV</button>
+    <!-- Text Input Area -->
+    <textarea id="rawInput" placeholder="...OR Paste data here (e.g. 12182590142 Joseph Muller 67)"></textarea>
 
-    <div id="status"></div>
+    <!-- Action Buttons -->
+    <div class="action-btns">
+      <button class="btn-main" id="processBtn" onclick="analyzeData()">Analyze instantly</button>
+      <button class="btn-clear" onclick="clearAll()">Clear</button>
+    </div>
+
+    <!-- Stats Cards -->
+    <div class="stats-grid">
+      <div class="stat-card total">Total Entry : <span id="countTotal">0</span></div>
+      <div class="stat-card male">Male: <span id="countMale">0</span></div>
+      <div class="stat-card female">Female: <span id="countFemale">0</span></div>
+      <div class="stat-card dup">Duplicate Numbers: <span id="countDup">0</span></div>
+    </div>
+
+    <!-- Export / Download CSV Section -->
+    <div class="download-section">
+      <label>📥 Export Filtered CSVs:</label>
+      <div class="download-btns">
+        <button class="btn-dl btn-dl-all" id="dlAllBtn" onclick="downloadFilteredCSV('all')" disabled> All Data</button>
+        <button class="btn-dl btn-dl-male" id="dlMaleBtn" onclick="downloadFilteredCSV('male')" disabled> Male Only</button>
+        <button class="btn-dl btn-dl-female" id="dlFemaleBtn" onclick="downloadFilteredCSV('female')" disabled> Female Only</button>
+      </div>
+    </div>
+
+    <!-- Results Table Header Info -->
+    <div id="statusText">দেখান হচ্ছে: সব এন্ট্রি (<span id="countTableRows">0</span>টি)</div>
+
+    <!-- Table -->
+    <div class="table-container">
+      <table>
+        <thead>
+          <tr>
+            <th>Number</th>
+            <th>Name Part</th>
+            <th>Age</th>
+            <th>Gender</th>
+            <th>Score Status</th>
+          </tr>
+        </thead>
+        <tbody id="resultBody">
+          <!-- Data rows will render here -->
+        </tbody>
+      </table>
+    </div>
   </div>
 
   <script>
-    function parseCSVLine(line) {
-      const result = [];
-      let current = '';
-      let inQuotes = false;
-      
-      for (let i = 0; i < line.length; i++) {
-        const char = line[i];
-        if (char === '"') {
-          inQuotes = !inQuotes;
-        } else if (char === ',' && !inQuotes) {
-          result.push(current.trim().replace(/^"|"$/g, ''));
-          current = '';
-        } else {
-          current += char;
-        }
-      }
-      result.push(current.trim().replace(/^"|"$/g, ''));
-      return result;
+    const defaultKeys = ["423b3d5117058b47f1cb2380b5929dba"];
+    let processedResults = [];
+
+    function createKeyBox(value = "") {
+      const container = document.getElementById("apiKeysContainer");
+      const group = document.createElement("div");
+      group.className = "key-input-group";
+
+      const input = document.createElement("input");
+      input.type = "password";
+      input.className = "api-key-input";
+      input.value = value;
+      input.placeholder = "Enter API Key";
+
+      const removeBtn = document.createElement("button");
+      removeBtn.type = "button";
+      removeBtn.className = "btn-sm btn-remove";
+      removeBtn.innerText = "✕";
+      removeBtn.onclick = () => container.removeChild(group);
+
+      group.appendChild(input);
+      group.appendChild(removeBtn);
+      container.appendChild(group);
     }
 
-    async function startBatchProcessing() {
-      const keysInput = document.getElementById("apiKeys").value.trim();
-      const fileInput = document.getElementById("csvFile");
-      const statusDiv = document.getElementById("status");
-      const btn = document.getElementById("processBtn");
+    function addKeyBox() { createKeyBox(""); }
 
-      if (!fileInput.files.length) {
-        alert("Please select a CSV file first.");
-        return;
+    window.addEventListener("DOMContentLoaded", () => {
+      defaultKeys.forEach(key => createKeyBox(key));
+    });
+
+    function handleFileUpload(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+
+      document.getElementById("fileNameDisplay").innerText = `Loaded: ${file.name}`;
+      const ext = file.name.split('.').pop().toLowerCase();
+
+      if (ext === 'csv') {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+          document.getElementById("rawInput").value = e.target.result;
+        };
+        reader.readAsText(file);
+      } else {
+        const reader = new FileReader();
+        reader.onload = function(e) {
+          const data = new Uint8Array(e.target.result);
+          const workbook = XLSX.read(data, { type: 'array' });
+          const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+          
+          const csvText = XLSX.utils.sheet_to_csv(firstSheet);
+          document.getElementById("rawInput").value = csvText;
+        };
+        reader.readAsArrayBuffer(file);
       }
+    }
 
-      const apiKeys = keysInput
-        ? keysInput.split(",").map(k => k.trim()).filter(k => k.length > 0)
-        : [];
+    function parseInputLine(line) {
+      const tokens = line.replace(/,/g, ' ').trim().split(/\s+/);
+      if (tokens.length === 0 || tokens[0] === "") return null;
 
-      const file = fileInput.files[0];
-      const text = await file.text();
+      let number = "";
+      let age = "";
+      let nameParts = [];
 
-      const lines = text.split(/\r?\n/).filter(line => line.trim().length > 0);
-      if (lines.length <= 1) {
-        alert("The selected CSV file contains no data.");
-        return;
-      }
-
-      btn.disabled = true;
-      statusDiv.style.color = "#0969da";
-      statusDiv.innerText = "Parsing CSV records...";
-
-      const headerCols = parseCSVLine(lines[0]).map(c => c.toLowerCase());
-      let phoneIdx = headerCols.findIndex(c => c.includes("phone") || c.includes("num") || c.includes("mobile"));
-      let nameIdx = headerCols.findIndex(c => c.includes("name"));
-      let ageIdx = headerCols.findIndex(c => c.includes("age"));
-
-      if (phoneIdx === -1) phoneIdx = 0;
-      if (nameIdx === -1) nameIdx = 1;
-
-      let rawData = [];
-      const startLine = (headerCols.some(c => c.includes("name") || c.includes("phone"))) ? 1 : 0;
-
-      for (let i = startLine; i < lines.length; i++) {
-        const cols = parseCSVLine(lines[i]);
-        if (cols.length > nameIdx) {
-          const phone = cols[phoneIdx] || '';
-          const fullName = cols[nameIdx] || '';
-          const age = ageIdx !== -1 ? (cols[ageIdx] || '') : '';
-
-          if (fullName.trim().length > 0) {
-            rawData.push({ phone, fullName, age });
-          }
+      tokens.forEach(token => {
+        const cleanToken = token.replace(/['"]+/g, '');
+        if (!number && /^\d{7,}$/.test(cleanToken)) {           number = cleanToken;         } else if (!age && /^\d{1,3}$/.test(cleanToken)) {
+          age = cleanToken;
+        } else if (cleanToken.length > 0) {
+          nameParts.push(cleanToken);
         }
-      }
+      });
 
-      const total = rawData.length;
-      if (total === 0) {
-        alert("No valid names found in the CSV file.");
-        btn.disabled = false;
-        statusDiv.innerText = "";
+      if (!number && tokens.length > 0) number = tokens[0];
+
+      return {
+        number: number,
+        name: nameParts.join(" "),
+        age: age || "-"
+      };
+    }
+
+    async function analyzeData() {
+      const rawText = document.getElementById("rawInput").value;
+      if (!rawText.trim()) {
+        alert("Please paste data or upload a CSV/XLSX file first!");
         return;
       }
 
+      const keyInputs = document.querySelectorAll(".api-key-input");
+      const apiKeys = Array.from(keyInputs).map(i => i.value.trim()).filter(v => v.length > 0);
+
+      const lines = rawText.split(/\r?\n/).filter(l => l.trim().length > 0);
+      const parsedEntries = lines.map(parseInputLine).filter(e => e !== null);
+
+      if (parsedEntries.length === 0) {
+        alert("No valid data found.");
+        return;
+      }
+
+      const btn = document.getElementById("processBtn");
+      btn.disabled = true;
+      btn.innerText = "Analyzing...";
+
+      const seenNumbers = new Set();
+      let duplicateCount = 0;
+
+      parsedEntries.forEach(entry => {
+        if (seenNumbers.has(entry.number)) {
+          entry.isDuplicate = true;
+          duplicateCount++;
+        } else {
+          entry.isDuplicate = false;
+          seenNumbers.add(entry.number);
+        }
+      });
+
+      // Batch call for API
       const chunkSize = 10;
-      let results = [];
-      let activeKeyIndex = 0;
+      let currentKeyIdx = 0;
+      let maleCount = 0;
+      let femaleCount = 0;
 
-      for (let i = 0; i < total; i += chunkSize) {
-        const chunk = rawData.slice(i, i + chunkSize);
-        let success = false;
-
-        while (!success) {
-          // Full Name প্রসেস করার জন্য পুরো নামটিকেই URL Encode করা হচ্ছে
+      for (let i = 0; i < parsedEntries.length; i += chunkSize) {
+        const chunk = parsedEntries.slice(i, i + chunkSize);
+        
+        if (apiKeys.length > 0) {
           const queryParams = chunk
-            .map(item => `name[]=${encodeURIComponent(item.fullName.trim())}`)
+            .map(item => `name[]=${encodeURIComponent(item.name || 'Unknown')}`)
             .join('&');
 
-          let url = `https://api.genderize.io?${queryParams}`;
-          if (apiKeys.length > 0 && apiKeys[activeKeyIndex]) {
-            url += `&apikey=${apiKeys[activeKeyIndex]}`;
-          }
+          const activeKey = apiKeys[currentKeyIdx];
+          const url = `https://api.genderize.io?${queryParams}&apikey=${activeKey}`;
 
           try {
             const res = await fetch(url);
-            if (res.status === 429) {
-              if (activeKeyIndex < apiKeys.length - 1) {
-                activeKeyIndex++;
-                statusDiv.innerText = `Key limit reached. Rotating to API Key #${activeKeyIndex + 1}...`;
-                await new Promise(r => setTimeout(r, 1000));
-                continue;
-              } else {
-                statusDiv.style.color = "#cf222e";
-                statusDiv.innerText = "Error: Daily limit reached across all provided API Keys.";
-                btn.disabled = false;
-                return;
-              }
+            if (res.status === 429 && currentKeyIdx + 1 < apiKeys.length) {
+              currentKeyIdx++;
+              i -= chunkSize;
+              continue;
             }
 
             if (res.ok) {
               const data = await res.json();
               const items = Array.isArray(data) ? data : [data];
-
               items.forEach((item, idx) => {
-                const orig = chunk[idx];
-                const gender = item.gender || 'unknown';
-                const accuracy = item.probability ? (item.probability * 100).toFixed(0) + '%' : '0%';
-
-                results.push({
-                  phone: orig.phone,
-                  fullName: orig.fullName,
-                  age: orig.age,
-                  gender: gender,
-                  accuracy: accuracy
-                });
+                chunk[idx].gender = item.gender || 'unknown';
               });
-              success = true;
-            } else {
-              throw new Error(`HTTP ${res.status}`);
             }
-          } catch (err) {
-            console.error("Batch processing error:", err);
-            statusDiv.style.color = "#cf222e";
-            statusDiv.innerText = `Network/API error at row ${i + 1}. Retrying...`;
-            await new Promise(r => setTimeout(r, 2000));
+          } catch (e) {
+            console.error(e);
           }
         }
 
-        statusDiv.style.color = "#0969da";
-        statusDiv.innerText = `Processed ${Math.min(i + chunkSize, total)} of ${total} records...`;
-        await new Promise(r => setTimeout(r, 150));
+        chunk.forEach(e => {
+          if (!e.gender) e.gender = 'unknown';
+          if (e.gender.toLowerCase() === 'male') maleCount++;
+          if (e.gender.toLowerCase() === 'female') femaleCount++;
+        });
       }
 
-      const lastDot = file.name.lastIndexOf('.');
-      const fileNameWithoutExt = lastDot !== -1 ? file.name.substring(0, lastDot) : file.name;
-      const fileExt = lastDot !== -1 ? file.name.substring(lastDot) : '.csv';
-      const outputFileName = `${fileNameWithoutExt}_Processed${fileExt}`;
+      processedResults = parsedEntries;
 
-      let csv = "\uFEFFPhone Number,Full Name,Age,Gender,Accuracy\n";
-      results.forEach(r => {
-        csv += `"${r.phone}","${r.fullName}","${r.age}","${r.gender}","${r.accuracy}"\n`;
+      // Render UI Stats
+      document.getElementById("countTotal").innerText = parsedEntries.length;
+      document.getElementById("countMale").innerText = maleCount;
+      document.getElementById("countFemale").innerText = femaleCount;
+      document.getElementById("countDup").innerText = duplicateCount;
+      document.getElementById("countTableRows").innerText = parsedEntries.length;
+
+      // Enable Download Buttons
+      document.getElementById("dlAllBtn").disabled = false;
+      document.getElementById("dlMaleBtn").disabled = (maleCount === 0);
+      document.getElementById("dlFemaleBtn").disabled = (femaleCount === 0);
+
+      // Render Table
+      const tbody = document.getElementById("resultBody");
+      tbody.innerHTML = "";
+
+      parsedEntries.forEach(item => {
+        const tr = document.createElement("tr");
+
+        const genderClass = item.gender === 'male' ? 'badge-male' : (item.gender === 'female' ? 'badge-female' : 'badge-unknown');
+        const genderText = item.gender.charAt(0).toUpperCase() + item.gender.slice(1);
+
+        const dupClass = item.isDuplicate ? 'badge-duplicate' : 'badge-unique';
+        const dupText = item.isDuplicate ? 'Duplicate' : 'Unique';
+
+        tr.innerHTML = `
+          <td>${item.number}</td>
+          <td>${item.name || '-'}</td>
+          <td>${item.age}</td>
+          <td><span class="badge ${genderClass}">${genderText}</span></td>
+          <td><span class="badge ${dupClass}">${dupText}</span></td>
+        `;
+        tbody.appendChild(tr);
       });
 
-      const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+      btn.disabled = false;
+      btn.innerText = "Analyze instantly";
+    }
+
+    function downloadFilteredCSV(filterType) {
+      if (processedResults.length === 0) return;
+
+      let filteredData = processedResults;
+      let filename = "Processed_Data.csv";
+
+      if (filterType === 'male') {
+        filteredData = processedResults.filter(r => r.gender.toLowerCase() === 'male');
+        filename = "Male_List.csv";
+      } else if (filterType === 'female') {
+        filteredData = processedResults.filter(r => r.gender.toLowerCase() === 'female');
+        filename = "Female_List.csv";
+      }
+
+      let csvContent = "\uFEFFNumber,Name Part,Age,Gender,Score Status\n";
+      filteredData.forEach(r => {
+        const status = r.isDuplicate ? "Duplicate" : "Unique";
+        csvContent += `"${r.number}","${r.name}","${r.age}","${r.gender}","${status}"\n`;
+      });
+
+      const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
       const link = document.createElement("a");
       link.href = URL.createObjectURL(blob);
-      link.download = outputFileName;
+      link.download = filename;
       document.body.appendChild(link);
       link.click();
       document.body.removeChild(link);
+    }
 
-      statusDiv.style.color = "#1a7f37";
-      statusDiv.innerText = `Complete! File saved as "${outputFileName}".`;
-      btn.disabled = false;
+    function clearAll() {
+      document.getElementById("rawInput").value = "";
+      document.getElementById("fileInput").value = "";
+      document.getElementById("fileNameDisplay").innerText = "";
+      document.getElementById("resultBody").innerHTML = "";
+      document.getElementById("countTotal").innerText = "0";
+      document.getElementById("countMale").innerText = "0";
+      document.getElementById("countFemale").innerText = "0";
+      document.getElementById("countDup").innerText = "0";
+      document.getElementById("countTableRows").innerText = "0";
+
+      document.getElementById("dlAllBtn").disabled = true;
+      document.getElementById("dlMaleBtn").disabled = true;
+      document.getElementById("dlFemaleBtn").disabled = true;
+
+      processedResults = [];
     }
   </script>
 </body>
