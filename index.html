@@ -60,7 +60,7 @@
 <body>
   <div class="container">
     <h1>Genderize Batch Processor</h1>
-    <p>Upload a CSV dataset to process first names using the Genderize.io API.</p>
+    <p>Upload a CSV dataset to process full names using the Genderize.io API.</p>
 
     <label for="apiKeys">API Keys (comma-separated for key rotation):</label>
     <input type="text" id="apiKeys" placeholder="e.g., key1, key2, key3" />
@@ -75,6 +75,26 @@
   </div>
 
   <script>
+    function parseCSVLine(line) {
+      const result = [];
+      let current = '';
+      let inQuotes = false;
+      
+      for (let i = 0; i < line.length; i++) {
+        const char = line[i];
+        if (char === '"') {
+          inQuotes = !inQuotes;
+        } else if (char === ',' && !inQuotes) {
+          result.push(current.trim().replace(/^"|"$/g, ''));
+          current = '';
+        } else {
+          current += char;
+        }
+      }
+      result.push(current.trim().replace(/^"|"$/g, ''));
+      return result;
+    }
+
     async function startBatchProcessing() {
       const keysInput = document.getElementById("apiKeys").value.trim();
       const fileInput = document.getElementById("csvFile");
@@ -93,7 +113,7 @@
       const file = fileInput.files[0];
       const text = await file.text();
 
-      const lines = text.split("\n").map(line => line.trim()).filter(line => line.length > 0);
+      const lines = text.split(/\r?\n/).filter(line => line.trim().length > 0);
       if (lines.length <= 1) {
         alert("The selected CSV file contains no data.");
         return;
@@ -103,22 +123,38 @@
       statusDiv.style.color = "#0969da";
       statusDiv.innerText = "Parsing CSV records...";
 
-      let rawData = [];
-      lines.forEach((line, index) => {
-        const cols = line.match(/(".*?"|[^",\s]+)(?=\s*,|\s*$)/g) || line.split(",");
-        if (cols.length >= 2) {
-          const phone = cols[0].replace(/"/g, '').trim();
-          const name = cols[1].replace(/"/g, '').trim();
-          const age = cols[2] ? cols[2].replace(/"/g, '').trim() : '';
+      const headerCols = parseCSVLine(lines[0]).map(c => c.toLowerCase());
+      let phoneIdx = headerCols.findIndex(c => c.includes("phone") || c.includes("num") || c.includes("mobile"));
+      let nameIdx = headerCols.findIndex(c => c.includes("name"));
+      let ageIdx = headerCols.findIndex(c => c.includes("age"));
 
-          if (index === 0 && (phone.toLowerCase().includes("phone") || phone.toLowerCase().includes("num") || name.toLowerCase().includes("name"))) {
-            return;
+      if (phoneIdx === -1) phoneIdx = 0;
+      if (nameIdx === -1) nameIdx = 1;
+
+      let rawData = [];
+      const startLine = (headerCols.some(c => c.includes("name") || c.includes("phone"))) ? 1 : 0;
+
+      for (let i = startLine; i < lines.length; i++) {
+        const cols = parseCSVLine(lines[i]);
+        if (cols.length > nameIdx) {
+          const phone = cols[phoneIdx] || '';
+          const fullName = cols[nameIdx] || '';
+          const age = ageIdx !== -1 ? (cols[ageIdx] || '') : '';
+
+          if (fullName.trim().length > 0) {
+            rawData.push({ phone, fullName, age });
           }
-          rawData.push({ phone, name, age });
         }
-      });
+      }
 
       const total = rawData.length;
+      if (total === 0) {
+        alert("No valid names found in the CSV file.");
+        btn.disabled = false;
+        statusDiv.innerText = "";
+        return;
+      }
+
       const chunkSize = 10;
       let results = [];
       let activeKeyIndex = 0;
@@ -128,8 +164,9 @@
         let success = false;
 
         while (!success) {
+          // Full Name প্রসেস করার জন্য পুরো নামটিকেই URL Encode করা হচ্ছে
           const queryParams = chunk
-            .map(item => `name[]=${encodeURIComponent(item.name.trim().split(' ')[0])}`)
+            .map(item => `name[]=${encodeURIComponent(item.fullName.trim())}`)
             .join('&');
 
           let url = `https://api.genderize.io?${queryParams}`;
@@ -164,7 +201,7 @@
 
                 results.push({
                   phone: orig.phone,
-                  name: orig.name,
+                  fullName: orig.fullName,
                   age: orig.age,
                   gender: gender,
                   accuracy: accuracy
@@ -177,17 +214,16 @@
           } catch (err) {
             console.error("Batch processing error:", err);
             statusDiv.style.color = "#cf222e";
-            statusDiv.innerText = `Network or API error at row ${i + 1}. Retrying...`;
+            statusDiv.innerText = `Network/API error at row ${i + 1}. Retrying...`;
             await new Promise(r => setTimeout(r, 2000));
           }
         }
 
         statusDiv.style.color = "#0969da";
         statusDiv.innerText = `Processed ${Math.min(i + chunkSize, total)} of ${total} records...`;
-        await new Promise(r => setTimeout(r, 200));
+        await new Promise(r => setTimeout(r, 150));
       }
 
-      // Generate dynamic output filename: <original>_Processed.csv
       const lastDot = file.name.lastIndexOf('.');
       const fileNameWithoutExt = lastDot !== -1 ? file.name.substring(0, lastDot) : file.name;
       const fileExt = lastDot !== -1 ? file.name.substring(lastDot) : '.csv';
@@ -195,7 +231,7 @@
 
       let csv = "\uFEFFPhone Number,Full Name,Age,Gender,Accuracy\n";
       results.forEach(r => {
-        csv += `"${r.phone}","${r.name}","${r.age}","${r.gender}","${r.accuracy}"\n`;
+        csv += `"${r.phone}","${r.fullName}","${r.age}","${r.gender}","${r.accuracy}"\n`;
       });
 
       const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
