@@ -168,20 +168,40 @@
     .stat-card.female { color: #db2777; }
     .stat-card.dup { color: #dc2626; }
 
-    /* Download Section */
+    /* Download Section & Column Selection */
     .download-section {
       background: #f1f5f9;
       border: 1px solid #e2e8f0;
       border-radius: 8px;
-      padding: 12px 16px;
+      padding: 16px;
       margin-bottom: 20px;
+    }
+    .column-selector {
+      display: flex;
+      gap: 16px;
+      flex-wrap: wrap;
+      margin-top: 8px;
+      margin-bottom: 14px;
+      background: #ffffff;
+      padding: 10px 14px;
+      border-radius: 6px;
+      border: 1px solid #cbd5e1;
+    }
+    .column-selector label {
       display: flex;
       align-items: center;
-      justify-content: space-between;
-      flex-wrap: wrap;
-      gap: 10px;
+      gap: 6px;
+      font-size: 13px;
+      font-weight: 500;
+      cursor: pointer;
+      color: #334155;
     }
-    .download-btns { display: flex; gap: 8px; }
+    .column-selector input[type="checkbox"] {
+      cursor: pointer;
+      width: 15px;
+      height: 15px;
+    }
+    .download-btns { display: flex; gap: 8px; flex-wrap: wrap; }
     .btn-dl {
       padding: 8px 14px;
       border-radius: 6px;
@@ -266,18 +286,25 @@
       <div class="stat-card dup">Duplicate Numbers: <span id="countDup">0</span></div>
     </div>
 
-    <!-- Export / Download CSV Section -->
+    <!-- Export / Download CSV Section with Column Selectors -->
     <div class="download-section">
-      <label>📥 Export Filtered CSVs:</label>
+      <label>📥 Select Columns to Export (Only Unique Numbers will be Downloaded):</label>
+      <div class="column-selector">
+        <label><input type="checkbox" id="colNumber" checked> Number</label>
+        <label><input type="checkbox" id="colName" checked> Name</label>
+        <label><input type="checkbox" id="colAge" checked> Age</label>
+        <label><input type="checkbox" id="colGender" checked> Gender</label>
+      </div>
+      
       <div class="download-btns">
-        <button class="btn-dl btn-dl-all" id="dlAllBtn" onclick="downloadFilteredCSV('all')" disabled> All Data</button>
-        <button class="btn-dl btn-dl-male" id="dlMaleBtn" onclick="downloadFilteredCSV('male')" disabled> Male Only</button>
-        <button class="btn-dl btn-dl-female" id="dlFemaleBtn" onclick="downloadFilteredCSV('female')" disabled> Female Only</button>
+        <button class="btn-dl btn-dl-all" id="dlAllBtn" onclick="downloadFilteredCSV('all')" disabled>Download Unique Data</button>
+        <button class="btn-dl btn-dl-male" id="dlMaleBtn" onclick="downloadFilteredCSV('male')" disabled>Male Only (Unique)</button>
+        <button class="btn-dl btn-dl-female" id="dlFemaleBtn" onclick="downloadFilteredCSV('female')" disabled>Female Only (Unique)</button>
       </div>
     </div>
 
     <!-- Results Table Header Info -->
-    <div id="statusText">দেখান হচ্ছে: সব এন্ট্রি (<span id="countTableRows">0</span>টি)</div>
+    <div id="statusText">Showing: All Entries (<span id="countTableRows">0</span>)</div>
 
     <!-- Table -->
     <div class="table-container">
@@ -506,21 +533,52 @@
     function downloadFilteredCSV(filterType) {
       if (processedResults.length === 0) return;
 
-      let filteredData = processedResults;
-      let filename = "Processed_Data.csv";
+      // Duplicate-gulo baad diye kebol unique gulo filter kora hoyeche
+      let filteredData = processedResults.filter(r => !r.isDuplicate);
+      let filename = "Unique_Processed_Data.csv";
 
       if (filterType === 'male') {
-        filteredData = processedResults.filter(r => r.gender.toLowerCase() === 'male');
-        filename = "Male_List.csv";
+        filteredData = filteredData.filter(r => r.gender.toLowerCase() === 'male');
+        filename = "Unique_Male_List.csv";
       } else if (filterType === 'female') {
-        filteredData = processedResults.filter(r => r.gender.toLowerCase() === 'female');
-        filename = "Female_List.csv";
+        filteredData = filteredData.filter(r => r.gender.toLowerCase() === 'female');
+        filename = "Unique_Female_List.csv";
       }
 
-      let csvContent = "\uFEFFNumber,Name Part,Age,Gender,Score Status\n";
+      if (filteredData.length === 0) {
+        alert("No unique data available for download.");
+        return;
+      }
+
+      // Check selected columns
+      const incNumber = document.getElementById("colNumber").checked;
+      const incName = document.getElementById("colName").checked;
+      const incAge = document.getElementById("colAge").checked;
+      const incGender = document.getElementById("colGender").checked;
+
+      if (!incNumber && !incName && !incAge && !incGender) {
+        alert("At least select 1 column to download!");
+        return;
+      }
+
+      // Dynamic Header Creation
+      let headers = [];
+      if (incNumber) headers.push("Number");
+      if (incName) headers.push("Name");
+      if (incAge) headers.push("Age");
+      if (incGender) headers.push("Gender");
+
+      let csvContent = "\uFEFF" + headers.join(",") + "\n";
+
+      // Dynamic Rows Creation
       filteredData.forEach(r => {
-        const status = r.isDuplicate ? "Duplicate" : "Unique";
-        csvContent += `"${r.number}","${r.name}","${r.age}","${r.gender}","${status}"\n`;
+        let row = [];
+        if (incNumber) row.push(`"${r.number}"`);
+        if (incName) row.push(`"${r.name}"`);
+        if (incAge) row.push(`"${r.age}"`);
+        if (incGender) row.push(`"${r.gender}"`);
+        
+        csvContent += row.join(",") + "\n";
       });
 
       const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
