@@ -233,6 +233,11 @@
     th { background: #f1f5f9; position: sticky; top: 0; padding: 10px 12px; border-bottom: 1px solid #e2e8f0; color: #475569; }
     td { padding: 10px 12px; border-bottom: 1px solid #f1f5f9; color: #334155; }
     
+    /* Highlight for Age Under 43 */
+    .row-under-43 {
+      background-color: #fef08a !important;
+    }
+
     .badge { display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: 600; }
     .badge-male { background: #eff6ff; color: #2563eb; }
     .badge-female { background: #fce7f3; color: #db2777; }
@@ -554,6 +559,12 @@
 
       parsedEntries.forEach(item => {
         const tr = document.createElement("tr");
+
+        // Mark row if age is under 43
+        const ageNum = parseInt(item.age, 10);
+        if (!isNaN(ageNum) && ageNum < 43) {
+          tr.classList.add("row-under-43");
+        }
 
         const genderClass = item.gender === 'male' ? 'badge-male' : (item.gender === 'female' ? 'badge-female' : 'badge-unknown');
         const genderText = item.gender.charAt(0).toUpperCase() + item.gender.slice(1);
