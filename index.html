@@ -288,7 +288,7 @@
 
     <!-- Export / Download CSV Section with Column Selectors -->
     <div class="download-section">
-      <label>📥 Select Columns to Export (Only Unique Numbers will be Downloaded):</label>
+      <label>📥 Select Columns to Export (Only Unique Numbers & Age 43+ will be Downloaded):</label>
       <div class="column-selector">
         <label><input type="checkbox" id="colNumber" checked> Number</label>
         <label><input type="checkbox" id="colName" checked> Name</label>
@@ -297,9 +297,9 @@
       </div>
       
       <div class="download-btns">
-        <button class="btn-dl btn-dl-all" id="dlAllBtn" onclick="downloadFilteredCSV('all')" disabled>Download Unique Data</button>
-        <button class="btn-dl btn-dl-male" id="dlMaleBtn" onclick="downloadFilteredCSV('male')" disabled>Male Only (Unique)</button>
-        <button class="btn-dl btn-dl-female" id="dlFemaleBtn" onclick="downloadFilteredCSV('female')" disabled>Female Only (Unique)</button>
+        <button class="btn-dl btn-dl-all" id="dlAllBtn" onclick="downloadFilteredCSV('all')" disabled>Download Unique Data (43+)</button>
+        <button class="btn-dl btn-dl-male" id="dlMaleBtn" onclick="downloadFilteredCSV('male')" disabled>Male Only (43+)</button>
+        <button class="btn-dl btn-dl-female" id="dlFemaleBtn" onclick="downloadFilteredCSV('female')" disabled>Female Only (43+)</button>
       </div>
     </div>
 
@@ -329,6 +329,12 @@
     const defaultKeys = ["423b3d5117058b47f1cb2380b5929dba"];
     let processedResults = [];
 
+    function saveKeysToStorage() {
+      const inputs = document.querySelectorAll(".api-key-input");
+      const keys = Array.from(inputs).map(i => i.value.trim()).filter(v => v.length > 0);
+      localStorage.setItem("genderize_api_keys", JSON.stringify(keys));
+    }
+
     function createKeyBox(value = "") {
       const container = document.getElementById("apiKeysContainer");
       const group = document.createElement("div");
@@ -339,22 +345,56 @@
       input.className = "api-key-input";
       input.value = value;
       input.placeholder = "Enter API Key";
+      input.oninput = saveKeysToStorage;
 
       const removeBtn = document.createElement("button");
       removeBtn.type = "button";
       removeBtn.className = "btn-sm btn-remove";
       removeBtn.innerText = "✕";
-      removeBtn.onclick = () => container.removeChild(group);
+      removeBtn.onclick = () => {
+        container.removeChild(group);
+        saveKeysToStorage();
+      };
 
       group.appendChild(input);
       group.appendChild(removeBtn);
       container.appendChild(group);
     }
 
-    function addKeyBox() { createKeyBox(""); }
+    function addKeyBox() { 
+      createKeyBox(""); 
+      saveKeysToStorage();
+    }
+
+    function removeKeyFromUIAndStorage(keyToRemove) {
+      const inputs = document.querySelectorAll(".api-key-input");
+      inputs.forEach(input => {
+        if (input.value.trim() === keyToRemove) {
+          const group = input.parentElement;
+          if (group && group.parentElement) {
+            group.parentElement.removeChild(group);
+          }
+        }
+      });
+      saveKeysToStorage();
+    }
 
     window.addEventListener("DOMContentLoaded", () => {
-      defaultKeys.forEach(key => createKeyBox(key));
+      const savedKeys = localStorage.getItem("genderize_api_keys");
+      let keysToLoad = defaultKeys;
+
+      if (savedKeys) {
+        try {
+          const parsed = JSON.parse(savedKeys);
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            keysToLoad = parsed;
+          }
+        } catch (e) {
+          console.error("Failed to parse saved keys", e);
+        }
+      }
+
+      keysToLoad.forEach(key => createKeyBox(key));
     });
 
     function handleFileUpload(event) {
@@ -417,8 +457,9 @@
         return;
       }
 
-      const keyInputs = document.querySelectorAll(".api-key-input");
-      const apiKeys = Array.from(keyInputs).map(i => i.value.trim()).filter(v => v.length > 0);
+      saveKeysToStorage();
+      let keyInputs = document.querySelectorAll(".api-key-input");
+      let apiKeys = Array.from(keyInputs).map(i => i.value.trim()).filter(v => v.length > 0);
 
       const lines = rawText.split(/\r?\n/).filter(l => l.trim().length > 0);
       const parsedEntries = lines.map(parseInputLine).filter(e => e !== null);
@@ -454,7 +495,7 @@
       for (let i = 0; i < parsedEntries.length; i += chunkSize) {
         const chunk = parsedEntries.slice(i, i + chunkSize);
         
-        if (apiKeys.length > 0) {
+        if (apiKeys.length > currentKeyIdx) {
           const queryParams = chunk
             .map(item => `name[]=${encodeURIComponent(item.name || 'Unknown')}`)
             .join('&');
@@ -464,9 +505,13 @@
 
           try {
             const res = await fetch(url);
-            if (res.status === 429 && currentKeyIdx + 1 < apiKeys.length) {
-              currentKeyIdx++;
-              i -= chunkSize;
+            
+            // Limit hit (429) or Unauthorized/Forbidden (401/402/403)
+            if (res.status === 429 || res.status === 401 || res.status === 402 || res.status === 403) {
+              console.warn(`Key limit reached or invalid key: ${activeKey}`);
+              removeKeyFromUIAndStorage(activeKey);
+              apiKeys.splice(currentKeyIdx, 1);
+              i -= chunkSize; // Retry current chunk with next key
               continue;
             }
 
@@ -478,7 +523,7 @@
               });
             }
           } catch (e) {
-            console.error(e);
+            console.error("Network or API error:", e);
           }
         }
 
@@ -533,20 +578,28 @@
     function downloadFilteredCSV(filterType) {
       if (processedResults.length === 0) return;
 
-      // Duplicate-gulo baad diye kebol unique gulo filter kora hoyeche
+      // 1. Unique data filter
       let filteredData = processedResults.filter(r => !r.isDuplicate);
-      let filename = "Unique_Processed_Data.csv";
 
+      // 2. Age 43 and above filter
+      filteredData = filteredData.filter(r => {
+        const ageNum = parseInt(r.age, 10);
+        return !isNaN(ageNum) && ageNum >= 43;
+      });
+
+      let filename = "Unique_Processed_Data_43Plus.csv";
+
+      // 3. Male / Female filter
       if (filterType === 'male') {
         filteredData = filteredData.filter(r => r.gender.toLowerCase() === 'male');
-        filename = "Unique_Male_List.csv";
+        filename = "Unique_Male_43Plus.csv";
       } else if (filterType === 'female') {
         filteredData = filteredData.filter(r => r.gender.toLowerCase() === 'female');
-        filename = "Unique_Female_List.csv";
+        filename = "Unique_Female_43Plus.csv";
       }
 
       if (filteredData.length === 0) {
-        alert("No unique data available for download.");
+        alert("No unique data available for age 43 and above.");
         return;
       }
 
